@@ -1,20 +1,2 @@
-# NiceGUI for the web interface
-nicegui==3.5.0
-
-# OpenAI API
-openai==2.15.0
-
-# Async HTTP client (NiceGUI dependency)
-httpx==0.28.1
-
-# FastAPI backend (NiceGUI dependency)
-fastapi==0.128.0
-
-# Uvicorn server
-uvicorn[standard]==0.40.0
-
-# Markdown support
-markdown2==2.5.4
-
-# Optional: for sending emails if needed
-python-dotenv==1.2.1
+nicegui
+openai
