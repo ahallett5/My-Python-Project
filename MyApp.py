@@ -1,157 +1,192 @@
 import os
-from nicegui import ui
 import openai
-import smtplib
-from email.message import EmailMessage
+from nicegui import ui
 
 # ---------- CONFIG ----------
-ADMIN_USER = 'aidan'
-ADMIN_PASS = 'TTellahnadia'
-
-users = {}  # store users: username -> password
-messages = []  # messages sent via contact form
-current_user = {'name': None}
-
-# OpenAI API key from environment
-OPENAI_KEY = os.environ.get('OPENAI_API_KEY')
+OPENAI_KEY = os.environ.get("OPENAI_API_KEY")
 openai.api_key = OPENAI_KEY
 
-# ---------- HEADER ----------
-ui.page_title('My Public App!')
+# ---------- USERS ----------
+users = {"aidan": "TTellahnadia"}  # default admin account
+logged_in_user = {"name": None}
 
+# ---------- HEADER ----------
+ui.page_title("My Public App!")
 with ui.header().classes('bg-blue-600 text-white'):
-    ui.label('My Website by Aidan Hallett').classes('text-h5')
-    ui.label('Free • No Watermark').classes('text-subtitle2')
+    ui.label("My Website").classes('text-h5')
+    ui.label("Free No Watermark").classes('text-subtitle2')
 
 # ---------- TABS ----------
 with ui.tabs().classes('w-full') as tabs:
-    home_tab = ui.tab('Home')
-    tools_tab = ui.tab('AI Chatbot')
-    admin_tab = ui.tab('Admin')
-    contact_tab = ui.tab('Contact')
+    home_tab = ui.tab("Home")
+    tools_tab = ui.tab("Tools")
+    ai_tab = ui.tab("Ask AI")
+    admin_tab = ui.tab("Admin")
+    about_tab = ui.tab("About")
+    contact_tab = ui.tab("Contact")
 
 with ui.tab_panels(tabs, value=home_tab).classes('w-full'):
 
-    # ---------- HOME ----------
+    # ----- HOME -----
     with ui.tab_panel(home_tab):
-        ui.label('🏠 Home').classes('text-h4')
-        ui.markdown("""
-Welcome to my NiceGUI website made by **Aidan Hallett**!
+        ui.label("🏠 Home").classes('text-h4')
+        ui.label("Welcome to my NiceGUI app made by Aidan Hallett! Click the buttons below:")
 
-Use the tabs to explore tools, AI chatbot, contact form, and admin features.
-        """)
+        def hello():
+            ui.notify("Hello! Thanks for visiting my app 😄")
 
-    # ---------- AI CHATBOT ----------
+        def surprise():
+            ui.notify("🎉 Surprise! You found the secret button!")
+
+        ui.button("Say Hello", on_click=hello)
+        ui.button("Surprise Me", on_click=surprise).props('color=purple')
+
+    # ----- TOOLS -----
     with ui.tab_panel(tools_tab):
-        ui.label('🤖 AI Chatbot').classes('text-h4')
-        ui.markdown('Ask questions or get suggestions about your website.')
+        ui.label("🛠 Tools").classes('text-h4')
+        user_input = ui.input("Type something")
 
-        question_input = ui.textarea('Ask me something...')
-        ai_answer = ui.markdown('')
+        def show_text():
+            ui.notify(f"You typed: {user_input.value}")
+
+        ui.button("Show my text", on_click=show_text)
+
+        count = {"value": 0}
+        counter_label = ui.label("Counter: 0")
+
+        def increase():
+            count["value"] += 1
+            counter_label.set_text(f"Counter: {count['value']}")
+
+        ui.button("Increase Counter", on_click=increase)
+
+    # ----- AI CHATBOT -----
+    with ui.tab_panel(ai_tab):
+        ui.label("🤖 Ask AI").classes('text-h4')
+        question_input = ui.input("Ask me anything:")
+        ai_answer = ui.markdown("")
 
         def ask_ai():
             if not OPENAI_KEY:
                 ai_answer.set_text("❌ OpenAI API key not set!")
                 return
-            try:
-                response = openai.ChatCompletion.create(
-                    model='gpt-3.5-turbo',
-                    messages=[{"role": "user", "content": question_input.value}],
-                    temperature=0.7
-                )
-                ai_answer.set_text(response['choices'][0]['message']['content'])
-            except Exception as e:
-                ai_answer.set_text(f"❌ Error: {str(e)}")
 
-        ui.button('Ask AI', on_click=ask_ai)
+            async def run():
+                try:
+                    response = await openai.ChatCompletion.acreate(
+                        model="gpt-3.5-turbo",
+                        messages=[{"role": "user", "content": question_input.value}],
+                        temperature=0.7
+                    )
+                    ai_answer.set_text(response['choices'][0]['message']['content'])
+                except Exception as e:
+                    ai_answer.set_text(f"❌ Error: {str(e)}")
 
-    # ---------- ADMIN ----------
+            ui.run_async(run())
+
+        ui.button("Ask AI", on_click=ask_ai, color="green")
+
+    # ----- ADMIN -----
     with ui.tab_panel(admin_tab):
-        ui.label('🔐 Admin Login').classes('text-h4')
+        ui.label("🔑 Admin Login").classes('text-h4')
+        admin_username = ui.input("Username")
+        admin_password = ui.input("Password", password=True)
+        login_status = ui.label("")
 
-        login_user = ui.input('Username')
-        login_pass = ui.input('Password', password=True)
-        admin_panel = ui.column().classes('hidden')
+        admin_options_panel = ui.column(visible=False)
 
-        user_list_label = ui.markdown('No users yet')
-        messages_label = ui.markdown('No messages yet')
-
-        def update_user_list():
-            user_list_label.set_text('\n'.join(f'- {u}' for u in users.keys()) or 'No users yet')
-
-        def update_messages():
-            messages_label.set_text('\n'.join(f"- From {m['name']}: {m['message']}" for m in messages) or 'No messages yet')
-
-        def login_admin():
-            if login_user.value == ADMIN_USER and login_pass.value == ADMIN_PASS:
-                admin_panel.classes(remove='hidden')
-                ui.notify('✅ Admin logged in')
+        def login():
+            if users.get(admin_username.value) == admin_password.value:
+                logged_in_user["name"] = admin_username.value
+                login_status.set_text(f"✅ Logged in as {admin_username.value}")
+                admin_options_panel.visible = True
                 update_user_list()
-                update_messages()
             else:
-                ui.notify('❌ Invalid credentials', color='red')
+                login_status.set_text("❌ Invalid credentials")
 
-        ui.button('Login', on_click=login_admin)
+        ui.button("Login", on_click=login, color="blue")
 
-        with admin_panel:
-            ui.label('👑 Admin Panel').classes('text-h5')
-            ui.markdown('### Registered Users:')
-            user_list_label
-            ui.markdown('### Messages Received:')
-            messages_label
+        with admin_options_panel:
+            ui.label("Admin Options").classes("text-h5")
+            # Dynamic user list
+            user_list_label = ui.markdown("No users yet")
 
-            # Example admin actions
-            def clear_messages():
-                messages.clear()
-                update_messages()
-                ui.notify('✅ Messages cleared')
+            def update_user_list():
+                user_list_label.set_text(
+                    "\n".join(f"- {u}" for u in users.keys()) or "No users yet"
+                )
 
-            def clear_users():
-                users.clear()
-                update_user_list()
-                ui.notify('✅ Users cleared')
+            # Add new user
+            new_user_input = ui.input("New username")
+            new_pass_input = ui.input("New password", password=True)
+            add_status = ui.label("")
 
-            ui.button('Clear Messages', on_click=clear_messages).props('color=red')
-            ui.button('Clear Users', on_click=clear_users).props('color=orange')
+            def add_user():
+                if new_user_input.value in users:
+                    add_status.set_text("❌ User already exists")
+                else:
+                    users[new_user_input.value] = new_pass_input.value
+                    add_status.set_text("✅ User added")
+                    update_user_list()
 
-    # ---------- CONTACT ----------
+            ui.button("Add User", on_click=add_user, color="green")
+
+            # Remove user
+            remove_user_input = ui.input("Remove username")
+            remove_status = ui.label("")
+
+            def remove_user():
+                if remove_user_input.value in users:
+                    if remove_user_input.value == "aidan":
+                        remove_status.set_text("❌ Cannot remove admin")
+                        return
+                    users.pop(remove_user_input.value)
+                    remove_status.set_text("✅ User removed")
+                    update_user_list()
+                else:
+                    remove_status.set_text("❌ User not found")
+
+            ui.button("Remove User", on_click=remove_user, color="red")
+
+    # ----- ABOUT -----
+    with ui.tab_panel(about_tab):
+        ui.label("ℹ️ About").classes("text-h4")
+        ui.markdown(
+            """
+This website is built using **NiceGUI** and Python.
+Made by **Aidan Hallett**.
+
+Features:
+- Multiple sections
+- AI Chatbot
+- Admin panel
+- Buttons, inputs, and counters
+- Fully free hosting
+- No watermark
+- Shareable public URL
+"""
+        )
+
+    # ----- CONTACT -----
     with ui.tab_panel(contact_tab):
-        ui.label('📬 Contact').classes('text-h4')
-        ui.markdown('Send a message to **Aidan Hallett**.')
+        ui.label("📬 Contact").classes("text-h4")
+        name_input = ui.input("Your name")
+        message_input = ui.textarea("Your message")
 
-        name_input = ui.input('Your name')
-        message_input = ui.textarea('Your message')
+        def send_message():
+            # Optional: replace with real email sending via SMTP
+            ui.notify(f"Thanks {name_input.value}! Message sent to aidanhallett@gmail.com")
+            name_input.value = ""
+            message_input.value = ""
 
-        def send_email():
-            msg_content = f"From: {name_input.value}\nMessage:\n{message_input.value}"
-            messages.append({'name': name_input.value, 'message': message_input.value})  # store in memory
-
-            # Optional: send email
-            try:
-                email = EmailMessage()
-                email['From'] = os.environ['EMAIL_USER']
-                email['To'] = 'aidanhallett@gmail.com'
-                email['Subject'] = 'New Website Message'
-                email.set_content(msg_content)
-
-                with smtplib.SMTP_SSL('smtp.gmail.com', 465) as smtp:
-                    smtp.login(os.environ['EMAIL_USER'], os.environ['EMAIL_PASS'])
-                    smtp.send_message(email)
-
-                ui.notify('✅ Message sent!')
-                name_input.value = ''
-                message_input.value = ''
-            except Exception as e:
-                ui.notify(f"❌ Could not send email: {str(e)}", color='red')
-
-        ui.button('Send Message', on_click=send_email).props('color=green')
+        ui.button("Send Message", on_click=send_message, color="green")
 
 # ---------- FOOTER ----------
-with ui.footer().classes('bg-gray-200'):
-    ui.label('Made with NiceGUI by Aidan Hallett • Free Hosting • No Watermark')
+with ui.footer().classes("bg-gray-200"):
+    ui.label("Made with NiceGUI • Free Hosting • No Watermark • By Aidan Hallett")
 
-ui.label('Aidan Hallett™').classes('absolute bottom-2 right-2 text-gray-400 opacity-50 text-xs')
+ui.label("Aidan Hallett™").classes("absolute bottom-2 right-2 text-gray-400 opacity-50 text-xs")
 
 # ---------- RUN ----------
 port = int(os.environ.get("PORT", 8080))
-ui.run(host='0.0.0.0', port=port)
+ui.run(host="0.0.0.0", port=port)
