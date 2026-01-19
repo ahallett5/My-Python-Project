@@ -2,62 +2,40 @@ import os
 from nicegui import ui
 import openai
 
-# -------------------- CONFIG --------------------
-ui.page_title('My Public App!')
+# Use environment variable for OpenAI key
+openai.api_key = os.environ.get("OPENAI_API_KEY")
 
-# Get OpenAI key from environment variables
-OPENAI_KEY = os.environ.get('OPENAI_API_KEY')
-openai.api_key = OPENAI_KEY
+ui.page_title('My Public App! - by Aidan Hallett')
 
-# -------------------- HEADER --------------------
+# ---------------- HEADER ----------------
 with ui.header().classes('bg-blue-600 text-white'):
     ui.label('My Website').classes('text-h5')
     ui.label('Free No Watermark').classes('text-subtitle2')
 
-# -------------------- TABS --------------------
+# ---------------- TABS ----------------
 with ui.tabs().classes('w-full') as tabs:
     home_tab = ui.tab('Home')
     tools_tab = ui.tab('Tools')
     about_tab = ui.tab('About')
     contact_tab = ui.tab('Contact')
-    admin_tab = ui.tab('Admin')
+    admin_tab = ui.tab('Admin')  # Admin tab
 
 with ui.tab_panels(tabs, value=home_tab).classes('w-full'):
 
-    # -------------------- HOME --------------------
+    # ----- HOME -----
     with ui.tab_panel(home_tab):
         ui.label('🏠 Home').classes('text-h4')
-        ui.label('Welcome to my NiceGUI app made by Aidan Hallett! Click the buttons below:')
+        ui.label('Welcome to my NiceGUI app made by Aidan Hallett!')
 
-        def hello():
-            ui.notify('Hello! Thanks for visiting my app 😄')
-
-        def surprise():
-            ui.notify('🎉 Surprise! You found the secret button!')
-
-        ui.button('Say Hello', on_click=hello)
-        ui.button('Surprise Me', on_click=surprise).props('color=purple')
-
-    # -------------------- TOOLS --------------------
+    # ----- TOOLS -----
     with ui.tab_panel(tools_tab):
         ui.label('🛠 Tools').classes('text-h4')
         user_input = ui.input('Type something')
-
         def show_text():
             ui.notify(f'You typed: {user_input.value}')
-
         ui.button('Show my text', on_click=show_text)
 
-        count = {'value': 0}
-
-        def increase():
-            count['value'] += 1
-            counter_label.set_text(f'Counter: {count["value"]}')
-
-        counter_label = ui.label('Counter: 0')
-        ui.button('Increase Counter', on_click=increase)
-
-    # -------------------- ABOUT --------------------
+    # ----- ABOUT -----
     with ui.tab_panel(about_tab):
         ui.label('ℹ️ About').classes('text-h4')
         ui.markdown("""
@@ -65,87 +43,106 @@ This website is built using **NiceGUI** and Python.
 
 Features:
 - Multiple sections
-- Buttons
-- Inputs
 - Admin panel
-- AI Chatbot
+- AI chatbot
 - Fully free hosting
 - No watermark
         """)
 
-    # -------------------- CONTACT --------------------
+    # ----- CONTACT -----
+    messages = []
     with ui.tab_panel(contact_tab):
         ui.label('📬 Contact').classes('text-h4')
-
         name = ui.input('Your name')
         message = ui.textarea('Your message')
 
         def send():
-            ui.notify(f'Thanks {name.value}! Message sent to aidanhallett@gmail.com.')
+            messages.append({'name': name.value, 'message': message.value})
+            ui.notify(f'Thanks {name.value}! Message sent.')
             name.value = ''
             message.value = ''
 
         ui.button('Send Message', on_click=send).props('color=green')
 
-    # -------------------- ADMIN --------------------
-    with ui.tab_panel(admin_tab):
-        ui.label('🔒 Admin Login').classes('text-h4')
+    # ----- ADMIN -----
+    admin_logged_in = {'status': False}
 
+    with ui.tab_panel(admin_tab):
+        ui.label('🔒 Admin Panel').classes('text-h4')
+        
+        # Login section
         username = ui.input('Username')
         password = ui.input('Password', password=True)
-        admin_login_panel = ui.column()
-        ui.button('Login', on_click=lambda: admin_login())
 
-        # Hidden admin options panel
-        admin_options_panel = ui.column().style('display: none')
+        login_button = ui.button('Login', on_click=lambda: None)
+        
+        admin_options_panel = ui.column().style('display: none')  # hidden by default
 
-        def admin_login():
+        def login():
             if username.value == 'aidan' and password.value == 'TTellahnadia':
-                ui.notify('✅ Logged in as admin!')
-                admin_login_panel.style('display: none')
+                ui.notify('✅ Admin logged in!')
+                admin_logged_in['status'] = True
+                username.value = ''
+                password.value = ''
                 admin_options_panel.style('display: flex')
-                show_admin_options()
             else:
                 ui.notify('❌ Wrong credentials!')
 
-        def show_admin_options():
-            ui.label('Welcome Admin!').parent(admin_options_panel)
-            ui.button('View Users', on_click=lambda: ui.notify('No users yet')).parent(admin_options_panel)
-            ui.button('Shutdown Server', on_click=lambda: ui.notify('Server would shutdown')).parent(admin_options_panel)
+        login_button.on('click', login)
 
-# -------------------- AI CHATBOT --------------------
-with ui.card().classes('m-4 p-4'):
-    ui.label('🤖 Ask AI').classes('text-h5')
-    question_input = ui.input('Ask a question...')
-    ai_answer = ui.markdown('AI answer will appear here.')
+        # ---------------- Admin Privileges ----------------
+        with admin_options_panel:
+            ui.label('🎯 Admin Options').classes('text-h5')
 
-    def ask_ai():
-        if not OPENAI_KEY:
-            ai_answer.set_text("❌ OpenAI API key not set!")
-            return
+            # View messages
+            def show_messages():
+                if messages:
+                    msg_text = '\n'.join(f"{m['name']}: {m['message']}" for m in messages)
+                    ui.dialog().add(ui.label(msg_text)).open()
+                else:
+                    ui.notify('No messages yet.')
 
-        async def run():
-            try:
-                response = await openai.ChatCompletion.acreate(
-                    model='gpt-3.5-turbo',
-                    messages=[{"role": "user", "content": question_input.value}],
-                    temperature=0.7
-                )
-                ai_answer.set_text(response['choices'][0]['message']['content'])
-            except Exception as e:
-                ai_answer.set_text(f"❌ Error: {str(e)}")
+            ui.button('View Messages', on_click=show_messages)
 
-        ui.run_async(run)
+            # Clear messages
+            def clear_messages():
+                messages.clear()
+                ui.notify('All messages cleared!')
 
-    ui.button('Ask AI', on_click=ask_ai).props('color=blue')
+            ui.button('Clear Messages', on_click=clear_messages, color='red')
 
-# -------------------- FOOTER --------------------
+            # Send announcement
+            announcement_input = ui.input('Announcement')
+            def send_announcement():
+                if announcement_input.value:
+                    ui.notify(f"Admin Announcement: {announcement_input.value}")
+                    announcement_input.value = ''
+            ui.button('Send Announcement', on_click=send_announcement, color='orange')
+
+            # AI Chatbot testing
+            question_input = ui.input('Ask AI')
+            ai_response = ui.label('')
+
+            def ask_ai():
+                if question_input.value:
+                    try:
+                        response = openai.ChatCompletion.create(
+                            model="gpt-3.5-turbo",
+                            messages=[{"role": "user", "content": question_input.value}]
+                        )
+                        ai_response.set_text(response.choices[0].message.content)
+                    except Exception as e:
+                        ai_response.set_text(f"Error: {e}")
+                    question_input.value = ''
+
+            ui.button('Ask AI', on_click=ask_ai)
+            ui.add(ai_response)
+
+# ---------------- FOOTER ----------------
 with ui.footer().classes('bg-gray-200'):
-    ui.label('Made with NiceGUI • Free Hosting • No Watermark • By Aidan Hallett')
+    ui.label('Made with NiceGUI • Free Hosting • No Watermark • by Aidan Hallett')
 
-# -------------------- WATERMARK --------------------
-ui.label('Aidan Hallett™').classes('absolute bottom-2 right-2 text-gray-400 opacity-50 text-xs')
-
-# -------------------- RUN --------------------
+# Cloud hosting
+import os
 port = int(os.environ.get("PORT", 8080))
 ui.run(host='0.0.0.0', port=port)
