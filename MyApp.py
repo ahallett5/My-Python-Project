@@ -1,149 +1,130 @@
 import os
 from nicegui import ui
-from openai import OpenAI
+import openai
+import smtplib
+from email.message import EmailMessage
 
-# ---------- AI ----------
-client = OpenAI(api_key=os.environ.get('OPENAI_API_KEY'))
-
-def ask_ai(prompt: str) -> str:
-    response = client.chat.completions.create(
-        model='gpt-4o-mini',
-        messages=[
-            {'role': 'system', 'content': 'You are a helpful web design assistant.'},
-            {'role': 'user', 'content': prompt}
-        ],
-        max_tokens=300
-    )
-    return response.choices[0].message.content
-
-# ---------- AUTH ----------
+# ---------- CONFIG ----------
 ADMIN_USER = 'aidan'
 ADMIN_PASS = 'TTellahnadia'
 
-users = {}  # simple in-memory user store
+users = {}  # store users: username -> password
 current_user = {'name': None}
-admin_logged_in = {'value': False}
 
-# ---------- UI ----------
-ui.page_title('My Public App')
+# OpenAI API key from environment
+OPENAI_KEY = os.environ.get('OPENAI_API_KEY')
+openai.api_key = OPENAI_KEY
+
+# ---------- HEADER ----------
+ui.page_title('My Public App!')
 
 with ui.header().classes('bg-blue-600 text-white'):
     ui.label('My Website').classes('text-h5')
-    ui.label('AI • Accounts • Tools').classes('text-subtitle2')
+    ui.label('Free • No Watermark').classes('text-subtitle2')
 
+# ---------- TABS ----------
 with ui.tabs().classes('w-full') as tabs:
-    home = ui.tab('Home')
-    tools = ui.tab('Tools')
-    ai_tab = ui.tab('AI Designer')
-    account = ui.tab('Account')
-    admin = ui.tab('Admin')
+    home_tab = ui.tab('Home')
+    tools_tab = ui.tab('Tools')
+    admin_tab = ui.tab('Admin')
+    contact_tab = ui.tab('Contact')
 
-with ui.tab_panels(tabs, value=home).classes('w-full'):
+with ui.tab_panels(tabs, value=home_tab).classes('w-full'):
 
     # ---------- HOME ----------
-    with ui.tab_panel(home):
+    with ui.tab_panel(home_tab):
         ui.label('🏠 Home').classes('text-h4')
-        ui.label('Welcome to my AI-powered NiceGUI website!')
+        ui.label('Welcome to my NiceGUI website!')
 
     # ---------- TOOLS ----------
-    with ui.tab_panel(tools):
+    with ui.tab_panel(tools_tab):
         ui.label('🛠 Tools').classes('text-h4')
+        ui.label('Try our AI-powered website suggestions below:')
 
-        text_input = ui.input('Text to transform')
-        result = ui.label()
+        user_input = ui.textarea('Describe what you want to improve')
+        ai_output = ui.markdown('')
 
-        def uppercase():
-            result.set_text(text_input.value.upper())
+        def get_ai_suggestion():
+            prompt = f"Suggest improvements for a website based on this input:\n{user_input.value}"
+            try:
+                response = openai.ChatCompletion.create(
+                    model='gpt-3.5-turbo',
+                    messages=[{"role": "user", "content": prompt}],
+                    temperature=0.7
+                )
+                ai_output.set_text(response['choices'][0]['message']['content'])
+            except Exception as e:
+                ai_output.set_text(f"❌ Error: {str(e)}")
 
-        def word_count():
-            result.set_text(f'Word count: {len(text_input.value.split())}')
-
-        ui.button('UPPERCASE', on_click=uppercase)
-        ui.button('Word Count', on_click=word_count)
-
-        ui.separator()
-
-        number = ui.number('Number')
-        ui.button(
-            'Square',
-            on_click=lambda: ui.notify(f'Result: {number.value ** 2}')
-        )
-
-    # ---------- AI CHATBOT ----------
-    with ui.tab_panel(ai_tab):
-        ui.label('🤖 AI Website Designer').classes('text-h4')
-        ui.label('Ask for redesign ideas, features, colors, layouts, etc.')
-
-        chat = ui.column().classes('w-full')
-        prompt = ui.textarea('Ask the AI...')
-
-        def send_prompt():
-            chat.clear()
-            chat.add(ui.label('🤖 Thinking...'))
-            reply = ask_ai(prompt.value)
-            chat.clear()
-            chat.add(ui.markdown(reply))
-
-        ui.button('Ask AI', on_click=send_prompt).props('color=purple')
-
-    # ---------- USER ACCOUNTS ----------
-    with ui.tab_panel(account):
-        ui.label('👤 User Account').classes('text-h4')
-
-        username = ui.input('Username')
-        password = ui.input('Password', password=True)
-        status = ui.label()
-
-        def register():
-            if username.value in users:
-                status.set_text('❌ User already exists')
-            else:
-                users[username.value] = password.value
-                status.set_text('✅ Registered successfully')
-
-        def login():
-            if users.get(username.value) == password.value:
-                current_user['name'] = username.value
-                status.set_text(f'✅ Logged in as {username.value}')
-            else:
-                status.set_text('❌ Invalid login')
-
-        ui.button('Register', on_click=register)
-        ui.button('Login', on_click=login)
+        ui.button('Get AI Suggestion', on_click=get_ai_suggestion)
 
     # ---------- ADMIN ----------
-    with ui.tab_panel(admin):
+    with ui.tab_panel(admin_tab):
         ui.label('🔐 Admin Login').classes('text-h4')
 
-        a_user = ui.input('Admin Username')
-        a_pass = ui.input('Admin Password', password=True)
-        admin_area = ui.column().classes('hidden')
+        login_user = ui.input('Username')
+        login_pass = ui.input('Password', password=True)
+        admin_panel = ui.column().classes('hidden')
 
-        def admin_login():
-            if a_user.value == ADMIN_USER and a_pass.value == ADMIN_PASS:
-                admin_logged_in['value'] = True
-                admin_area.classes(remove='hidden')
-                ui.notify('Admin logged in')
+        # admin user list display
+        user_list_label = ui.markdown('No users yet')
+
+        def update_user_list():
+            user_list_label.set_text('\n'.join(f'- {u}' for u in users.keys()) or 'No users yet')
+
+        def login_admin():
+            if login_user.value == ADMIN_USER and login_pass.value == ADMIN_PASS:
+                admin_panel.classes(remove='hidden')
+                ui.notify('✅ Admin logged in')
+                update_user_list()
             else:
-                ui.notify('Invalid admin credentials', color='red')
+                ui.notify('❌ Invalid credentials', color='red')
 
-        ui.button('Login', on_click=admin_login)
+        ui.button('Login', on_click=login_admin)
 
-        with admin_area:
-            ui.separator()
-            ui.label('👑 Admin Panel')
-            ui.label('Registered Users:')
-            ui.markdown(lambda: '\n'.join(f'- {u}' for u in users.keys()) or 'No users yet')
+        with admin_panel:
+            ui.label('👑 Admin Panel').classes('text-h5')
+            ui.markdown('### Registered Users:')
+            ui.markdown('')  # spacer
+            user_list_label  # dynamic user list
+
+    # ---------- CONTACT ----------
+    with ui.tab_panel(contact_tab):
+        ui.label('📬 Contact').classes('text-h4')
+
+        name_input = ui.input('Your name')
+        message_input = ui.textarea('Your message')
+
+        def send_email():
+            try:
+                email = EmailMessage()
+                email['From'] = os.environ['EMAIL_USER']
+                email['To'] = 'aidanhallett@gmail.com'
+                email['Subject'] = 'New Website Message'
+                email.set_content(f'From: {name_input.value}\n\n{message_input.value}')
+
+                with smtplib.SMTP_SSL('smtp.gmail.com', 465) as smtp:
+                    smtp.login(
+                        os.environ['EMAIL_USER'],
+                        os.environ['EMAIL_PASS']
+                    )
+                    smtp.send_message(email)
+
+                ui.notify('✅ Message sent!')
+                name_input.value = ''
+                message_input.value = ''
+
+            except Exception as e:
+                ui.notify(f'❌ Failed to send email: {str(e)}', color='red')
+
+        ui.button('Send Message', on_click=send_email).props('color=green')
 
 # ---------- FOOTER ----------
 with ui.footer().classes('bg-gray-200'):
-    ui.label('Built with NiceGUI • AI Powered • No Watermark')
+    ui.label('Made with NiceGUI • Free Hosting • No Watermark')
 
-ui.label(
-    'Aidan Hallett™',
-    classes='absolute bottom-2 right-2 text-gray-400 opacity-50 text-xs'
-)
+ui.label('Aidan Hallett™').classes('absolute bottom-2 right-2 text-gray-400 opacity-50 text-xs')
 
 # ---------- RUN ----------
-port = int(os.environ.get('PORT', 8080))
+port = int(os.environ.get("PORT", 8080))
 ui.run(host='0.0.0.0', port=port)
